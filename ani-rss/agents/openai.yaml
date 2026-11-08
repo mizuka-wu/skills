@@ -1,0 +1,3 @@
+interface:
+  display_name: "Ani RSS"
+  short_description: "Manage anime subscriptions via ani-rss API"
