@@ -1,6 +1,6 @@
 ---
 name: mijia-homekit-bridge
-description: 把米家(Mijia)设备经 Home Assistant 桥接进 Apple Home 并治理 HomeKit 150 accessory 上限：三方设备映射、实体级白名单、bridge filter 安全修改、Apple/HA 双侧对账。依赖 Home Assistant REST/WebSocket API（长期令牌）或 mcp-ha，可选 HomeClaw MCP 读 Apple Home 实况。Use when 米家设备要进苹果家庭、HomeKit 桥缺设备/超 150、重配 homekit 桥暴露范围、或做米家↔HA↔HomeKit 设备对账。
+description: 把米家(Mijia)设备经 Home Assistant 桥接进 Apple Home 并治理 HomeKit 150 accessory 上限：三方设备映射、实体级白名单、bridge filter 安全修改、Apple/HA 双侧对账、Home App 批量分房(homeclaw-cli)。依赖 Home Assistant REST/WebSocket API（长期令牌）或 mcp-ha，可选 HomeClaw（MCP 读实况，CLI 兼管理员写）。Use when 米家设备要进苹果家庭、HomeKit 桥缺设备/超 150、重配 homekit 桥暴露范围、批量整理 accessory 房间归属、或做米家↔HA↔HomeKit 设备对账。
 ---
 
 # 米家 → Home Assistant → Apple Home 桥接治理
@@ -16,7 +16,7 @@ AI 检测/模式/童锁这类功能开关），桥进 HomeKit 会撞上 **150 ac
 |---|---|---|
 | Home Assistant REST/WebSocket API + 长期令牌 | ✅ | 实体/设备/注册表全量读（`GET /api/states`、`/api/config/entity_registry`、`/api/config/device_registry`）、area 写（仅 WS `area_registry/update`） |
 | 或 mcp-ha（`homeassistant` 源） | 等价 | `render_template` / `GetLiveContext`（注意：只见已曝光实体）/ `config` 只读 |
-| HomeClaw MCP（可选，Apple Home 侧真相） | 可选 | `homekit_status/accessories/device_map` 直接读 Home.app 实况；没有它就用 Home App 截图/抽查对账 |
+| HomeClaw（可选，Apple Home 侧真相 + 管理员写） | 可选 | MCP 5 工具只读实况（`homekit_status/accessories/device_map/rooms/events`）；**CLI 有管理员写权限**（批量分房/改名/场景，见「批量分房」）；没有它就用 Home App 截图/抽查对账 |
 | HA 配置文件读写 + 容器重启 | ✅（改桥时） | filter 落盘在 `.storage/core.config_entries` |
 
 安全：长期令牌只存本机（Keychain/env），不进任何提交物；米家账号 OAuth 走集成官方流程，
@@ -101,12 +101,31 @@ print("filter 已写入", len(whitelist), "个实体；现在可以 start HA")
 
 - **米家门锁进不了 HomeKit**：`xiaomi_home` 不建 `lock.*` 实体（云端 API 不下发放锁
   指令）。要门锁只能 `xiaomi_miot` 单配该设备，云解锁延迟大，慎选。
-- **房间归属**：HomeKit accessory 落在哪个房间由 Home App 手动分派，桥无权指定；
-  HA `area` 与米家房间是两套体系（米家房间 → HA area 同步走 WS API 脚本）。
+- **房间归属**：房间写入在 Apple 侧（桥无权指定），但**不必手拖**——批量分房见下文
+  「批量分房」一节；HA `area` 与米家房间是两套体系（米家房间 → HA area 同步走 WS API
+  脚本），已同步好的 area 表就是分房映射的真相源。
 - HomeClaw `accessories list` 输出可达数十 KB，agent 场景走 spillover 文件解析，勿重复拉取。
 - HA Jinja 无 `zip` filter；`GetLiveContext` 只查已曝光实体，全量状态用 template。
 - 电视类走 `remote` 域，HomeKit 支持弱（能开不能选台）；米家云播放/音量指令对电视不可用，
   需要播放控制选 `tobtdto/ha_multibra`（MiTV 原生 MQTT token）或 homebridge-miot。
+
+## 批量分房（homeclaw-cli = Apple 侧管理员钥匙）
+
+MCP 的 5 个工具只读，管理员写权限在 HomeClaw.app 自带 CLI 里（`Contents/MacOS/homeclaw-cli`，
+assign-rooms / rename / create-room / scenes 等全套）——Home App 里几十台逐个拖的活可以脚本化：
+
+```bash
+# 映射表真相源 = HA：render_template 拉 entity_id|friendly_name|area
+# join 键：HomeKit accessory name == HA friendly_name（含双空格，全等精确匹配）
+cat assignments.json | homeclaw-cli assign-rooms - --dry-run   # 先预览
+cat assignments.json | homeclaw-cli assign-rooms - --json      # 执行，读 assigned/not_found
+```
+
+- JSON：`{"assignments":[{"uuid":"<list 输出的 id>","room":"房间名"}]}`——
+  **必须 `uuid` 键名**；写成 `{"accessory":...}` 配 UUID 值会全量 not_found。
+- 沙箱版（App Store）CLI 读不了容器外文件，JSON 一律走 stdin `-`。
+- 目标房间须已存在（缺的先 `create-room`）；跑完用 homekit_rooms MCP 读回，
+  按房间计数核对预期。实测（2026-11，47 accessory）：41 台搬迁 assigned 41 / not_found 0。
 
 ## 回滚代价表（动手前告知用户）
 
