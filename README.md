@@ -6,6 +6,7 @@
 | 技能 | 用途 |
 |---|---|
 | [ani-rss](ani-rss/) | AniRSS 追番订阅管理（CLI + AI 工作流） |
+| [mijia-homekit-bridge](mijia-homekit-bridge/) | 米家设备经 Home Assistant 桥进 Apple Home，HomeKit 150 上限治理 |
 | [xiaomi-nas-root-ssh](xiaomi-nas-root-ssh/) | 小米 NAS（MINAS）root/SSH/Docker 应用运维 |
 
 ## 安装
